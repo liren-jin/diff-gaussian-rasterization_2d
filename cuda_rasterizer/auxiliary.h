@@ -39,15 +39,9 @@ __device__ const float SH_C3[] = {
 	-0.5900435899266435f
 };
 
-__forceinline__ __device__ float ndc2Pix(float v, int S, float prcp)
+__forceinline__ __device__ float ndc2Pix(float v, int S)
 {
-	// return ((v + 1.0) * S - 1.0) * 0.5;
-	return ((v + 1.0) * S - 1.0) * 0.5; //+ S * (prcp - 0.5);
-}
-
-__forceinline__ __device__ float pix2Ndc(float v, int S, float prcp)
-{
-	return ((v - S * (prcp - 0.5)) * 2.0 + 1.0); /// S - 1.0;
+	return ((v + 1.0) * S - 1.0) * 0.5; 
 }
 
 __forceinline__ __device__ void getRect(const float2 p, int max_radius, uint2& rect_min, uint2& rect_max, dim3 grid)
@@ -147,15 +141,10 @@ __forceinline__ __device__ bool in_frustum(
 	float3& p_view,
 	float3& p_proj, 
 	float2& p_pix, 
-	const float* patchbbox,
+    int H, int W,
 	bool prefiltered)
 {
-
-	// if ((p_proj.x < -1.3 || p_proj.x > 1.3 || p_proj.y < -1.3 || p_proj.y > 1.3))
-	// 	printf("p_proj out of frustum! %.8f, %.8f, %.8f\n", p_proj.x, p_proj.y, p_proj.z);
-	// float expand = 1.1;
-	// if (p_view.z < 0 || ((p_proj.x < -expand || p_proj.x > expand || p_proj.y < -expand || p_proj.y > expand)))
-	float x0 = patchbbox[1], y0 = patchbbox[0], x1 = patchbbox[3], y1 = patchbbox[2];
+	float x0 = 0, y0 = 0, x1 = W, y1 = H;
 	float w = x1 - x0, h = y1 - y0;
 	float expand = 0.2;
 	if (p_view.z < 0 || p_pix.x < x0 - w * expand || p_pix.x >= x1 + w * expand || p_pix.y < y0 - h * expand || p_pix.y >= y1 + h * expand)
