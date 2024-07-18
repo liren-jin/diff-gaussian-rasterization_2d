@@ -36,7 +36,6 @@ namespace CudaRasterizer
 		float2* means2D;
 		float* cov3D;
 		float4* conic_opacity;
-		float4* cutoff;
 		float* rgb;
 		float* normal;
 		float* Jinv;
@@ -55,10 +54,6 @@ namespace CudaRasterizer
 		uint32_t* n_contrib;
 		float* accum_alpha;
 		float* accum_depth;
-		float* accum_color;
-		uint32_t* n_contrib_cut;
-		float* accum_alpha_cut;
-		float* accum_var;
 
 		static ImageState fromChunk(char*& chunk, size_t N);
 	};

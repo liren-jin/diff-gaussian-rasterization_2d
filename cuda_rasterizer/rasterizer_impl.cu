@@ -179,12 +179,8 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char*& chunk, s
 	ImageState img;
 	obtain(chunk, img.accum_alpha, N, 128);
 	obtain(chunk, img.accum_depth, N, 128);
-	obtain(chunk, img.accum_color, 3 * N, 128);
 	obtain(chunk, img.n_contrib, N, 128);
 	obtain(chunk, img.ranges, N, 128);
-	obtain(chunk, img.n_contrib_cut, N, 128);
-	obtain(chunk, img.accum_alpha_cut, N, 128);
-	obtain(chunk, img.accum_var, N, 128);
 	return img;
 }
 
@@ -222,8 +218,6 @@ int CudaRasterizer::Rasterizer::forward(
 	const float* cov3D_precomp,
 	const float* viewmatrix,
 	const float* projmatrix,
-	const float* prcppoint,
-	const float* patchbbox,
 	const float* cam_pos,
 	const float tan_fovx, float tan_fovy,
 	const bool prefiltered,
@@ -231,7 +225,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float* out_color,
 	float* out_normal,
 	float* out_depth,
-	float* out_opac,
+	float* out_opacity,
 	int* radii,
 	bool debug)
 {
@@ -273,7 +267,6 @@ int CudaRasterizer::Rasterizer::forward(
 		cov3D_precomp,
 		colors_precomp,
 		viewmatrix, projmatrix, 
-		prcppoint, patchbbox,
 		(glm::vec3*)cam_pos,
 		width, height,
 		focal_x, focal_y,
@@ -347,7 +340,6 @@ int CudaRasterizer::Rasterizer::forward(
 		imgState.ranges,
 		binningState.point_list,
 		width, height, 
-		prcppoint, patchbbox,
 		focal_x, focal_y,
 		geomState.means2D,
 		feature_ptr,
@@ -359,13 +351,9 @@ int CudaRasterizer::Rasterizer::forward(
 		geomState.pview,
 		imgState.accum_alpha,
 		imgState.accum_depth,
-		imgState.accum_color,
-		imgState.accum_var,
 		imgState.n_contrib,
-		imgState.accum_alpha_cut,
-		imgState.n_contrib_cut,
 		background,
-		out_color, out_normal, out_depth, out_opac, 
+		out_color, out_normal, out_depth, out_opacity, 
 		config), debug)
 	return num_rendered;
 }
@@ -386,8 +374,6 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* viewmatrix,
 	const float* projmatrix,
 	const float* campos,
-	const float* prcppoint,
-	const float* patchbbox,
 	const float tan_fovx, float tan_fovy,
 	const int* radii,
 	char* geom_buffer,
@@ -396,7 +382,7 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* dL_dpixcolor,
 	const float* dL_dpixnormal,
 	const float* dL_dpixdepth,
-	const float* dL_dpixopac,
+	const float* dL_dpixopacity,
 	float* dL_dmean2D,
 	float* dL_dconic,
 	float* dL_dopacity,
@@ -408,9 +394,6 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dsh,
 	float* dL_dscale,
 	float* dL_drot,
-	float* dL_dviewmat,
-	float* dL_dprojmat,
-	float* dL_dcampos,
 	bool debug, 
 	float* config)
 {
@@ -439,7 +422,6 @@ void CudaRasterizer::Rasterizer::backward(
 		imgState.ranges,
 		binningState.point_list,
 		width, height,
-		patchbbox,
 		background,
 		geomState.means2D,
 		geomState.conic_opacity,
@@ -450,15 +432,11 @@ void CudaRasterizer::Rasterizer::backward(
 		geomState.viewCos,
 		imgState.accum_alpha,
 		imgState.accum_depth,
-		imgState.accum_color,
-		imgState.accum_var,
 		imgState.n_contrib,
-		imgState.accum_alpha_cut,
-		imgState.n_contrib_cut,
 		dL_dpixcolor,
 		dL_dpixnormal,
 		dL_dpixdepth,
-		dL_dpixopac,
+		dL_dpixopacity,
 		(float3*)dL_dmean2D,
 		(float4*)dL_dconic,
 		dL_dopacity,
@@ -494,6 +472,5 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dsh,
 		(glm::vec3*)dL_dscale,
 		(glm::vec4*)dL_drot, 
-		dL_dviewmat, dL_dprojmat, dL_dcampos,
 		config), debug)
 }
