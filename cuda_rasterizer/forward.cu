@@ -209,15 +209,12 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	const float scale_modifier,
 	const glm::vec4* rotations,
 	const float* opacities,
-	// const float* cutoff,
 	const float* shs,
 	bool* clamped,
 	const float* cov3D_precomp,
 	const float* colors_precomp,
 	const float* viewmatrix,
 	const float* projmatrix,
-	const float* prcppoint,
-	const float* patchbbox,
 	const glm::vec3* cam_pos,
 	const int W, int H,
 	const float tan_fovx, float tan_fovy,
@@ -229,7 +226,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	float* rgb,
 	float* normal,
 	float4* conic_opacity,
-	// float4* cutOff,
 	float* Jinv,
 	float* viewCos,
 	int* pid,
@@ -248,7 +244,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	radii[idx] = 0;
 	tiles_touched[idx] = 0;
 
-
 	// Transform point by projecting
 	float3 p_orig = { orig_points[3 * idx], orig_points[3 * idx + 1], orig_points[3 * idx + 2] };
 	float4 p_hom = transformPoint4x4(p_orig, projmatrix);
@@ -257,34 +252,23 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	float3 p_view = transformPoint4x3(p_orig, viewmatrix);
 
 	// Perform near culling, quit if outside.
-	float2 point_image = { ndc2Pix(p_proj.x, W, prcppoint[0]), ndc2Pix(p_proj.y, H, prcppoint[1]) };
-	if (!in_frustum(p_view, p_proj, point_image, patchbbox, prefiltered)) return;
+	float2 point_image = { ndc2Pix(p_proj.x, W), ndc2Pix(p_proj.y, H) };
+	if (!in_frustum(p_view, p_proj, point_image, H, W, prefiltered)) return;
 
 	glm::mat3 R = quaternion2rotmat(rotations[idx]);
 
-	bool surface = config[0] > 0, pix_depth = config[2] > 0;// apply_cutoff = config[4] > 0, update_cutoff = config[5] > 0;
+	bool surface = config[0] > 0, pix_depth = config[2] > 0;
 	float3 n_view;
 
 	if (surface) {
-		// compute camera normal from rotation matrix
-		// float3 n_world = {R[0][2], R[1][2], R[2][2]};
-		// float3 wrdNormal = {R[2][0], R[2][1], R[2][2]};
-		// float3 wrdNormal = {R[0][0], R[0][1], R[0][2]};
 		float3 n_view   = transformVec4x3({R[0][2], R[1][2], R[2][2]}, viewmatrix);
 		float3 ax0_view = transformVec4x3({R[0][0], R[1][0], R[2][0]}, viewmatrix);
 		float3 ax1_view = transformVec4x3({R[0][1], R[1][1], R[2][1]}, viewmatrix);
 		// printf("here\n");
 		if (!front_facing(n_view, p_view, &viewCos[idx], prefiltered)) return; // cull backfacing points
-		// printf("points left: %.8f, %.8f, %.8f\n", p_view.x, p_view.y, p_view.z);
 		normal[idx * 3 + 0] = n_view.x;
 		normal[idx * 3 + 1] = n_view.y;
 		normal[idx * 3 + 2] = n_view.z;
-		// normal[idx * 3 + 0] = wrdNormal.x;
-		// normal[idx * 3 + 1] = wrdNormal.y;
-		// normal[idx * 3 + 2] = wrdNormal.z;
-		// normal[idx * 3 + 0] = p_orig.x;
-		// normal[idx * 3 + 1] = p_orig.y;
-		// normal[idx * 3 + 2] = p_orig.z;
 
 		if (pix_depth) {
 			// compute local homography between two planes
@@ -294,7 +278,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 			for (int i = 0; i < 10; i++) Jinv[idx * 10 + i] = Jinv_u0_u1[i];
 		}
 	}
-
 
 	// If 3D covariance matrix is precomputed, use it, otherwise compute
 	// from scaling and rotation parameters.
@@ -309,16 +292,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 		cov3D = cov3Ds + idx * 6;
 	}
 
-
-	// float4 scrnAxes = {R[0][0], R[1][0], R[0][1], R[1][1]};
-	// Compute 2D screen-space covariance matrix
-	// glm::mat3 J;
 	float3 cov = computeCov2D(p_view, focal_x, focal_y, tan_fovx, tan_fovy, cov3D, viewmatrix);
-
-	// if (surface && pix_depth) {
-	// 	bool cond = prepare_pixDepth(J, n_view, p_view, &Jinv[idx * 9]);
-	// 	if (!cond) return;
-	// }
 
 	// Invert covariance (EWA algorithm)
 	float det = (cov.x * cov.z - cov.y * cov.y);
@@ -333,7 +307,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	float mid = 0.5f * (cov.x + cov.z);
 	float lambda1 = mid + sqrt(max(0.1f, mid * mid - det));
 	float lambda2 = mid - sqrt(max(0.1f, mid * mid - det));
-	// if (min(lambda1, lambda2) == 0 || max(lambda1, lambda2) / min(lambda1, lambda2) > 100) return;
 	float my_radius = ceil(3.f * sqrt(max(lambda1, lambda2)));
 	
 
@@ -352,15 +325,12 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	}
 
 	// Store some useful helper data for the next steps.
-	// pview[idx] = p_view;
 	depths[idx] = p_view.z;
 	radii[idx] = my_radius;
 	points_xy_image[idx] = point_image;
 	// Inverse 2D covariance and opacity neatly pack into one float4
 	conic_opacity[idx] = { conic.x, conic.y, conic.z, opacities[idx] };
-	// if (apply_cutoff) cutOff[idx] = {cutoff[idx * 4 + 0], cutoff[idx * 4 + 1], cutoff[idx * 4 + 2], cutoff[idx * 4 + 3]};
 	tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
-	// pid[idx] = idx;
 }
 
 // Main rasterization method. Collaboratively works on one tile per
@@ -372,32 +342,23 @@ renderCUDA(
 	const uint2* __restrict__ ranges,
 	const uint32_t* __restrict__ point_list,
 	int W, int H, 
-	const float* prcppoint,
-	const float* patchbbox,
 	const float focal_x, const float focal_y,
 	const float2* __restrict__ points_xy_image,
 	const float* __restrict__ features,
 	const float* __restrict__ normal,
 	const float* __restrict__ depth,
 	const float4* __restrict__ conic_opacity,
-	// const float4* __restrict__ cutOff,
-	// float* cutoff,
 	const float* __restrict__ Jinv,
 	const int* __restrict__ pid,
 	const float3* __restrict__ pview,
 	float* __restrict__ final_T,
 	float* __restrict__ final_D,
-	float* __restrict__ final_C,
-	float* __restrict__ final_V,
 	uint32_t* __restrict__ n_contrib,
-	float* __restrict__ final_T_cut,
-	uint32_t* __restrict__ n_contrib_cut,
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
 	float* __restrict__ out_normal,
 	float* __restrict__ out_depth,
-	float* __restrict__ out_opac,
-	// float* __restrict__ out_rayVar,
+	float* __restrict__ out_opacity,
 	float* config)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -463,7 +424,6 @@ renderCUDA(
 			collected_pid[block.thread_rank()] = pid[coll_id];
 			for (int i = 0; i < 3; i++) collected_normal[i * BLOCK_SIZE + block.thread_rank()] = normal[coll_id * 3 + i];
 			for (int i = 0; i < 10; i++) collected_Jinv[i * BLOCK_SIZE + block.thread_rank()] = Jinv[coll_id * 10 + i];
-			// collected_cutOff[block.thread_rank()] = cutOff[coll_id];
 		}
 		block.sync();
 
@@ -510,7 +470,6 @@ renderCUDA(
                 axDif_buffer[blend_count * 2 + 1] = -pos_dif.y;
             }
 			D += depth_temp * w;
-			// if (blend_count == 0) depth_first = depth_temp;
 			
 			if (blend_count < D_buffer_size && T > 0.1) {
 				D_buffer[blend_count] = depth_temp;
@@ -557,7 +516,7 @@ renderCUDA(
 		out_normal[1 * H * W + pix_id] = surface ? N[1] : 0;
 		out_normal[2 * H * W + pix_id] = surface ? N[2] : 0;
 		out_depth[pix_id] = normalize_depth ? D / (1 - T) : D + T * 10;
-		out_opac[pix_id] = 1 - T;
+		out_opacity[pix_id] = 1 - T;
 		if (normalize_depth) final_D[pix_id] = D;
 
 		// // Calculate depth variance along a ray
@@ -624,60 +583,43 @@ void FORWARD::render(
 	const uint2* ranges,
 	const uint32_t* point_list,
 	int W, int H, 
-	const float* prcppoint,
-	const float* patchbbox,
 	const float focal_x, const float focal_y,
 	const float2* means2D,
 	const float* colors,
 	const float* normal,
 	const float* depth,
 	const float4* conic_opacity,
-	// const float4* cutOff,
-	// float* cutoff, // use for hard modify
 	const float* Jinv,
 	const int* pid,
 	const float3* pview,
 	float* final_T,
 	float* final_D,
-	float* final_C,
-	float* final_V,
 	uint32_t* n_contrib,
-	float* final_T_cut,
-	uint32_t* n_contrib_cut,
 	const float* bg_color,
 	float* out_color,
 	float* out_normal,
 	float* out_depth,
-	float* out_opac,
-	// float* out_rayVar,
+	float* out_opacity,
 	float* config)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
 		point_list,
 		W, H, 
-		prcppoint,
-		patchbbox,
 		focal_x, focal_y,
 		means2D,
 		colors,
 		normal,
 		depth,
 		conic_opacity,
-		// cutOff,
-		// cutoff,
 		Jinv,
 		pid,
 		pview,
 		final_T,
 		final_D,
-		final_C,
-		final_V,
 		n_contrib,
-		final_T_cut,
-		n_contrib_cut,
 		bg_color,
-		out_color, out_normal, out_depth, out_opac, //out_rayVar, 
+		out_color, out_normal, out_depth, out_opacity,
 		config);
 }
 
@@ -687,15 +629,12 @@ void FORWARD::preprocess(int P, int D, int M,
 	const float scale_modifier,
 	const glm::vec4* rotations,
 	const float* opacities,
-	// const float* cutoff,
 	const float* shs,
 	bool* clamped,
 	const float* cov3D_precomp,
 	const float* colors_precomp,
 	const float* viewmatrix,
 	const float* projmatrix,
-	const float* prcppoint,
-	const float* patchbbox,
 	const glm::vec3* cam_pos,
 	const int W, int H,
 	const float focal_x, float focal_y,
@@ -707,7 +646,6 @@ void FORWARD::preprocess(int P, int D, int M,
 	float* rgb,
 	float* normal,
 	float4* conic_opacity,
-	// float4* cutOff,
 	float* Jinv,
 	float* viewCos,
 	int* pid,
@@ -724,15 +662,12 @@ void FORWARD::preprocess(int P, int D, int M,
 		scale_modifier,
 		rotations,
 		opacities,
-		// cutoff,
 		shs,
 		clamped,
 		cov3D_precomp,
 		colors_precomp,
 		viewmatrix, 
 		projmatrix,
-		prcppoint,
-		patchbbox,
 		cam_pos,
 		W, H,
 		tan_fovx, tan_fovy,
@@ -744,7 +679,6 @@ void FORWARD::preprocess(int P, int D, int M,
 		rgb,
 		normal,
 		conic_opacity,
-		// cutOff,
 		Jinv,
 		viewCos,
 		pid,
