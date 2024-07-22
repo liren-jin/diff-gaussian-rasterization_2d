@@ -215,6 +215,7 @@ int CudaRasterizer::Rasterizer::forward(
 	const float* scales,
 	const float scale_modifier,
 	const float* rotations,
+	const float* confidences,
 	const float* cov3D_precomp,
 	const float* viewmatrix,
 	const float* projmatrix,
@@ -226,6 +227,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float* out_normal,
 	float* out_depth,
 	float* out_opacity,
+	float* out_confidence,
 	float* importance,
 	int* radii,
 	bool debug)
@@ -344,6 +346,7 @@ int CudaRasterizer::Rasterizer::forward(
 		focal_x, focal_y,
 		geomState.means2D,
 		feature_ptr,
+        confidences,
 		geomState.normal,
 		geomState.depths,
 		geomState.conic_opacity,
@@ -354,7 +357,7 @@ int CudaRasterizer::Rasterizer::forward(
 		imgState.accum_depth,
 		imgState.n_contrib,
 		background,
-		out_color, out_normal, out_depth, out_opacity, importance, 
+		out_color, out_normal, out_depth, out_opacity, out_confidence, importance, 
 		config), debug)
 	return num_rendered;
 }
@@ -371,6 +374,7 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* scales,
 	const float scale_modifier,
 	const float* rotations,
+	const float* confidences,
 	const float* cov3D_precomp,
 	const float* viewmatrix,
 	const float* projmatrix,
@@ -384,6 +388,7 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* dL_dpixnormal,
 	const float* dL_dpixdepth,
 	const float* dL_dpixopacity,
+	const float* dL_dpixconfidence,
 	float* dL_dmean2D,
 	float* dL_dconic,
 	float* dL_dopacity,
@@ -395,6 +400,7 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dsh,
 	float* dL_dscale,
 	float* dL_drot,
+	float* dL_dconfidence,
 	bool debug, 
 	float* config)
 {
@@ -427,6 +433,7 @@ void CudaRasterizer::Rasterizer::backward(
 		geomState.means2D,
 		geomState.conic_opacity,
 		color_ptr,
+        confidences,
 		geomState.normal,
 		geomState.depths,
 		geomState.Jinv,
@@ -438,12 +445,15 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dpixnormal,
 		dL_dpixdepth,
 		dL_dpixopacity,
+		dL_dpixconfidence,
 		(float3*)dL_dmean2D,
 		(float4*)dL_dconic,
 		dL_dopacity,
 		dL_dcolor,
 		dL_dnormal,
-		dL_ddepth, config), debug)
+		dL_ddepth, 
+        dL_dconfidence,
+        config), debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,

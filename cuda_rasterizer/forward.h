@@ -62,6 +62,7 @@ namespace FORWARD
 		const float focal_x, const float focal_y,
 		const float2* points_xy_image,
 		const float* features,
+		const float* confidences,
 		const float* normal,
 		const float* depth,
 		const float4* conic_opacity,
@@ -76,6 +77,7 @@ namespace FORWARD
 		float* out_normal,
 		float* out_depth,
 		float* out_opacity,
+		float* out_confidence,
 		float* importance,
 		float* config);
 }

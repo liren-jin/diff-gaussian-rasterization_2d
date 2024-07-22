@@ -31,6 +31,7 @@ def rasterize_gaussians(
     opacities,
     scales,
     rotations,
+    confidences,
     cov3Ds_precomp,
     raster_settings,
 ):
@@ -42,6 +43,7 @@ def rasterize_gaussians(
         opacities,
         scales,
         rotations,
+        confidences,
         cov3Ds_precomp,
         raster_settings,
     )
@@ -58,6 +60,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         opacities,
         scales,
         rotations,
+        confidences,
         cov3Ds_precomp,
         raster_settings,
     ):
@@ -70,6 +73,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             opacities,
             scales,
             rotations,
+            confidences,
             raster_settings.scale_modifier,
             cov3Ds_precomp,
             raster_settings.viewmatrix,
@@ -98,6 +102,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                     normal,
                     depth,
                     opacity,
+                    confidence,
                     importance,
                     radii,
                     geomBuffer,
@@ -117,6 +122,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                 normal,
                 depth,
                 opacity,
+                confidence,
                 importance,
                 radii,
                 geomBuffer,
@@ -132,6 +138,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             means3D,
             scales,
             rotations,
+            confidences,
             cov3Ds_precomp,
             radii,
             sh,
@@ -139,7 +146,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             binningBuffer,
             imgBuffer,
         )
-        return color, normal, depth, opacity, importance, radii
+        return color, normal, depth, opacity, confidence, importance, radii
 
     @staticmethod
     def backward(
@@ -148,6 +155,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         grad_out_normal,
         grad_out_depth,
         grad_out_opacity,
+        grad_out_confidence,
         grad_out_importance,
         grad_out_radii,
     ):
@@ -160,6 +168,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             means3D,
             scales,
             rotations,
+            confidences,
             cov3Ds_precomp,
             radii,
             sh,
@@ -176,6 +185,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             colors_precomp,
             scales,
             rotations,
+            confidences,
             raster_settings.scale_modifier,
             cov3Ds_precomp,
             raster_settings.viewmatrix,
@@ -186,6 +196,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_out_normal,
             grad_out_depth,
             grad_out_opacity,
+            grad_out_confidence,
             sh,
             raster_settings.sh_degree,
             raster_settings.campos,
@@ -212,6 +223,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                     grad_sh,
                     grad_scales,
                     grad_rotations,
+                    grad_confidences,
                 ) = _C.rasterize_gaussians_backward(*args)
             except Exception as ex:
                 torch.save(cpu_args, "snapshot_bw.dump")
@@ -229,6 +241,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                 grad_sh,
                 grad_scales,
                 grad_rotations,
+                grad_confidences,
             ) = _C.rasterize_gaussians_backward(*args)
 
         grads = (
@@ -239,6 +252,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_opacities,
             grad_scales,
             grad_rotations,
+            grad_confidences,
             grad_cov3Ds_precomp,
             None,
         )
@@ -286,6 +300,7 @@ class GaussianRasterizer(nn.Module):
         colors_precomp=None,
         scales=None,
         rotations=None,
+        confidences=None,
         cov3D_precomp=None,
     ):
 
@@ -326,6 +341,7 @@ class GaussianRasterizer(nn.Module):
             opacities,
             scales,
             rotations,
+            confidences,
             cov3D_precomp,
             raster_settings,
         )

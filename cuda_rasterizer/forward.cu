@@ -345,6 +345,7 @@ renderCUDA(
 	const float focal_x, const float focal_y,
 	const float2* __restrict__ points_xy_image,
 	const float* __restrict__ features,
+	const float* __restrict__ confidences,
 	const float* __restrict__ normal,
 	const float* __restrict__ depth,
 	const float4* __restrict__ conic_opacity,
@@ -359,6 +360,7 @@ renderCUDA(
 	float* __restrict__ out_normal,
 	float* __restrict__ out_depth,
 	float* __restrict__ out_opacity,
+	float* __restrict__ out_confidence,
 	float* __restrict__ importance,
 	float* config)
 {
@@ -390,6 +392,7 @@ renderCUDA(
 	__shared__ float collected_feature[CHANNELS * BLOCK_SIZE];
 	__shared__ float collected_depth[BLOCK_SIZE];
 	__shared__ float collected_normal[3 * BLOCK_SIZE];
+	__shared__ float collected_confidence[BLOCK_SIZE];
 	__shared__ float collected_Jinv[10 * BLOCK_SIZE];
 	__shared__ int collected_pid[BLOCK_SIZE];
 	// __shared__ float4 collected_cutOff[BLOCK_SIZE];
@@ -399,6 +402,7 @@ renderCUDA(
 	uint32_t contributor = 0, blend_count = 0;
 	uint32_t last_contributor = 0, cut_contributor = 0;
 	float C[CHANNELS] = { 0 }, N[3] = {0}, D = 0, depth_first, CUT = 0;
+	float Conf = { 0.0001f };
 
 	bool surface = config[0] > 0, per_pixel_depth = config[2] > 0, normalize_depth = config[1] > 0;
 	const int D_buffer_size = 128;
@@ -421,6 +425,7 @@ renderCUDA(
 			collected_id[block.thread_rank()] = coll_id;
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
+			collected_confidence[block.thread_rank()] = confidences[coll_id];
 			for (int i = 0; i < CHANNELS; i++) collected_feature[i * BLOCK_SIZE + block.thread_rank()] = features[coll_id * CHANNELS + i];
 			collected_depth[block.thread_rank()] = depth[coll_id];
 			collected_pid[block.thread_rank()] = pid[coll_id];
@@ -481,7 +486,7 @@ renderCUDA(
 				blend_count++;
 			}
 
-
+            Conf += collected_confidence[j] * w;
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++) C[ch] += collected_feature[ch * BLOCK_SIZE + j] * w;
 			
@@ -530,6 +535,7 @@ renderCUDA(
 		out_normal[2 * H * W + pix_id] = surface ? N[2] : 0;
 		out_depth[pix_id] = normalize_depth ? D / (1 - T) : D + T * 10;
 		out_opacity[pix_id] = 1 - T;
+        out_confidence[pix_id] = Conf;
 		if (normalize_depth) final_D[pix_id] = D;
 
 		// // Calculate depth variance along a ray
@@ -599,6 +605,7 @@ void FORWARD::render(
 	const float focal_x, const float focal_y,
 	const float2* means2D,
 	const float* colors,
+	const float* confidences,
 	const float* normal,
 	const float* depth,
 	const float4* conic_opacity,
@@ -613,6 +620,7 @@ void FORWARD::render(
 	float* out_normal,
 	float* out_depth,
 	float* out_opacity,
+	float* out_confidence,
 	float* out_importance,
 	float* config)
 {
@@ -623,6 +631,7 @@ void FORWARD::render(
 		focal_x, focal_y,
 		means2D,
 		colors,
+        confidences,
 		normal,
 		depth,
 		conic_opacity,
@@ -633,7 +642,7 @@ void FORWARD::render(
 		final_D,
 		n_contrib,
 		bg_color,
-		out_color, out_normal, out_depth, out_opacity, out_importance,
+		out_color, out_normal, out_depth, out_opacity, out_confidence, out_importance,
 		config);
 }
 
