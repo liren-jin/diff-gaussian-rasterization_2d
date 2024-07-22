@@ -1,6 +1,6 @@
-# TODO
-- add importance score for each 2D gaussian based on its contribution to rendering.
-- add uncertainty rendering 
+# Modification
+- add importance score for each 2D gaussian based on its contribution to rendering (forward).
+- add confidence rendering (forward/backward)
   
 # Differential Gaussian Rasterization
 
