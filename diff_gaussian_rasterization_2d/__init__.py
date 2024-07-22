@@ -98,6 +98,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                     normal,
                     depth,
                     opacity,
+                    importance,
                     radii,
                     geomBuffer,
                     binningBuffer,
@@ -116,6 +117,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                 normal,
                 depth,
                 opacity,
+                importance,
                 radii,
                 geomBuffer,
                 binningBuffer,
@@ -137,7 +139,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             binningBuffer,
             imgBuffer,
         )
-        return color, normal, depth, opacity, radii
+        return color, normal, depth, opacity, importance, radii
 
     @staticmethod
     def backward(
@@ -146,6 +148,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         grad_out_normal,
         grad_out_depth,
         grad_out_opacity,
+        grad_out_importance,
         grad_out_radii,
     ):
 

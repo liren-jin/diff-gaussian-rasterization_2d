@@ -76,6 +76,7 @@ namespace FORWARD
 		float* out_normal,
 		float* out_depth,
 		float* out_opacity,
+		float* importance,
 		float* config);
 }
 

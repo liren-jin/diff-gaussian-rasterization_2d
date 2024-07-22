@@ -226,6 +226,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float* out_normal,
 	float* out_depth,
 	float* out_opacity,
+	float* importance,
 	int* radii,
 	bool debug)
 {
@@ -353,7 +354,7 @@ int CudaRasterizer::Rasterizer::forward(
 		imgState.accum_depth,
 		imgState.n_contrib,
 		background,
-		out_color, out_normal, out_depth, out_opacity, 
+		out_color, out_normal, out_depth, out_opacity, importance, 
 		config), debug)
 	return num_rendered;
 }

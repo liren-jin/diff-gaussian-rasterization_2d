@@ -359,6 +359,7 @@ renderCUDA(
 	float* __restrict__ out_normal,
 	float* __restrict__ out_depth,
 	float* __restrict__ out_opacity,
+	float* __restrict__ importance,
 	float* config)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -385,6 +386,7 @@ renderCUDA(
 	__shared__ int collected_id[BLOCK_SIZE];
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
+	__shared__ float collected_importance[BLOCK_SIZE];
 	__shared__ float collected_feature[CHANNELS * BLOCK_SIZE];
 	__shared__ float collected_depth[BLOCK_SIZE];
 	__shared__ float collected_normal[3 * BLOCK_SIZE];
@@ -422,6 +424,7 @@ renderCUDA(
 			for (int i = 0; i < CHANNELS; i++) collected_feature[i * BLOCK_SIZE + block.thread_rank()] = features[coll_id * CHANNELS + i];
 			collected_depth[block.thread_rank()] = depth[coll_id];
 			collected_pid[block.thread_rank()] = pid[coll_id];
+			// collected_importance[block.thread_rank()] = importance[coll_id];
 			for (int i = 0; i < 3; i++) collected_normal[i * BLOCK_SIZE + block.thread_rank()] = normal[coll_id * 3 + i];
 			for (int i = 0; i < 10; i++) collected_Jinv[i * BLOCK_SIZE + block.thread_rank()] = Jinv[coll_id * 10 + i];
 		}
@@ -483,8 +486,11 @@ renderCUDA(
 			for (int ch = 0; ch < CHANNELS; ch++) C[ch] += collected_feature[ch * BLOCK_SIZE + j] * w;
 			
 			if (surface) for (int ch = 0; ch < 3; ch++) N[ch] += collected_normal[ch * BLOCK_SIZE + j] * w;
-			
 
+            // maximum weight over all rays as the importance score
+
+            // if (w > collected_importance[j])
+            //     collected_importance[j] = w;
 
 			T = test_T;
 
@@ -498,8 +504,15 @@ renderCUDA(
 			// }
 
 		}
+		// write share memory back to global memory
+		// if (range.x + progress < range.y)
+		// {
+		// 	int coll_id = point_list[range.x + progress];
+		// 	importance[coll_id] = collected_importance[block.thread_rank()];
+		// }
+		// block.sync();
 	}
-
+    
 	// All threads that treat valid pixel write out their final
 	// rendering data to the frame and auxiliary buffers.
 	if (inside)
@@ -600,6 +613,7 @@ void FORWARD::render(
 	float* out_normal,
 	float* out_depth,
 	float* out_opacity,
+	float* out_importance,
 	float* config)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
@@ -619,7 +633,7 @@ void FORWARD::render(
 		final_D,
 		n_contrib,
 		bg_color,
-		out_color, out_normal, out_depth, out_opacity,
+		out_color, out_normal, out_depth, out_opacity, out_importance,
 		config);
 }
 

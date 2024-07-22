@@ -53,6 +53,7 @@ namespace CudaRasterizer
 			float* out_normal,
 			float* out_depth,
 			float* out_opacity,
+			float* importance,
 			int* radii = nullptr,
 			bool debug = false);
 
