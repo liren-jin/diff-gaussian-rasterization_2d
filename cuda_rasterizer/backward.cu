@@ -641,6 +641,8 @@ renderCUDA(
 			// Keep track of current Gaussian ID. Skip, if this one
 			// is behind the last contributor for this pixel.
 			contributor--;			// if (use_cutoff && dist > cut - shift) {
+			if (contributor >= last_contributor)
+				continue;
 			// 	dL_dalpha *= alpha_decay;
 			// 	dL_dalpha_var *= T;
 			// 	float dL_ddecay = (dL_dalpha_var) * (alpha / alpha_decay);
@@ -749,7 +751,7 @@ renderCUDA(
 			dL_dalpha *= T;
 			
 			// Add grads w.r.t. alpha from opac output
-			dL_dalpha += dL_dpixO * T_final / (1 - alpha);
+			dL_dalpha += dL_dpixO * T_final / (1.f - alpha);
 			
 			// Update last alpha (to be used in the next iteration)
 			last_alpha = alpha;
