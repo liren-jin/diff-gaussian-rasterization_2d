@@ -640,24 +640,10 @@ renderCUDA(
 		{
 			// Keep track of current Gaussian ID. Skip, if this one
 			// is behind the last contributor for this pixel.
-			contributor--;			// if (use_cutoff && dist > cut - shift) {
-			if (contributor >= last_contributor)
+			contributor--;
+            if (contributor >= last_contributor)
 				continue;
-			// 	dL_dalpha *= alpha_decay;
-			// 	dL_dalpha_var *= T;
-			// 	float dL_ddecay = (dL_dalpha_var) * (alpha / alpha_decay);
-			// 	float dL_ddist_decay = dL_ddecay * alpha_decay * (alpha_decay - 1) * decay_weight;
-			// 	float dL_dcut_decay = dL_ddecay * alpha_decay * (alpha_decay - 1) * -decay_weight;
 
-			// 	// Add grad w.r.t. dist & cut from alpha decay
-			// 	dL_ddist += dL_ddist_decay;
-			// 	dL_dcut += dL_dcut_decay;
-
-			// 	atomicAdd(&(dL_dcutoff[global_id]).x, dL_dcut);
-			// 	// atomicAdd(&(dL_dcutoff[global_id]), dL_dcut);
-			// }
-
-			// printf("%.10f, ", dL_dalpha);
 			// Skip grads for grazing points
 			// if (surface && collected_viewCos[j] > -0.01) continue;
 

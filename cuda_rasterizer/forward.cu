@@ -257,7 +257,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 
 	glm::mat3 R = quaternion2rotmat(rotations[idx]);
 
-	bool surface = config[0] > 0, pix_depth = config[2] > 0;
+	bool surface = config[0] > 0, pix_depth = config[2] > 0, front_only = config[4] > 0;
 	float3 n_view;
 
 	if (surface) {
@@ -265,7 +265,8 @@ __global__ void preprocessCUDA(int P, int D, int M,
 		float3 ax0_view = transformVec4x3({R[0][0], R[1][0], R[2][0]}, viewmatrix);
 		float3 ax1_view = transformVec4x3({R[0][1], R[1][1], R[2][1]}, viewmatrix);
 		// printf("here\n");
-		if (!front_facing(n_view, p_view, &viewCos[idx], prefiltered)) return; // cull backfacing points
+        if (front_only)
+		    {if (!front_facing(n_view, p_view, &viewCos[idx], prefiltered)) return;} // cull backfacing points
 		normal[idx * 3 + 0] = n_view.x;
 		normal[idx * 3 + 1] = n_view.y;
 		normal[idx * 3 + 2] = n_view.z;
