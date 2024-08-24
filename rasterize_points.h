@@ -26,6 +26,7 @@ RasterizeGaussiansCUDA(
 	const torch::Tensor& confidences,
 	const float scale_modifier,
 	const torch::Tensor& cov3D_precomp,
+	const torch::Tensor& pixel_mask,
 	const torch::Tensor& viewmatrix,
 	const torch::Tensor& projmatrix,
 	const float tan_fovx, 

@@ -73,6 +73,7 @@ namespace FORWARD
 		float* final_D,
 		uint32_t* n_contrib,
 		const float* bg_color,
+		const float* pixel_mask,
 		float* out_color,
 		float* out_normal,
 		float* out_depth,

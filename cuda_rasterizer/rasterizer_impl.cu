@@ -217,6 +217,7 @@ int CudaRasterizer::Rasterizer::forward(
 	const float* rotations,
 	const float* confidences,
 	const float* cov3D_precomp,
+	const float* pixel_mask,
 	const float* viewmatrix,
 	const float* projmatrix,
 	const float* cam_pos,
@@ -357,6 +358,7 @@ int CudaRasterizer::Rasterizer::forward(
 		imgState.accum_depth,
 		imgState.n_contrib,
 		background,
+        pixel_mask,
 		out_color, out_normal, out_depth, out_opacity, out_confidence, importance, 
 		config), debug)
 	return num_rendered;

@@ -357,6 +357,7 @@ renderCUDA(
 	float* __restrict__ final_D,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
+	const float* __restrict__ pixel_mask,
 	float* __restrict__ out_color,
 	float* __restrict__ out_normal,
 	float* __restrict__ out_depth,
@@ -376,9 +377,12 @@ renderCUDA(
 
 
 	// Check if this thread is associated with a valid pixel or outside.
-	bool inside = pix.x < W&& pix.y < H;
+	bool inside = pix.x < W && pix.y < H;
+    bool require_render = true;
+    if (pixel_mask != nullptr)
+        require_render = pixel_mask[pix_id] > 0.0;
 	// Done threads can help with fetching, but don't rasterize
-	bool done = !inside;
+	bool done = (!inside) || (!require_render);
 
 	// Load start/end range of IDs to process in bit sorted list.
 	uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
@@ -405,7 +409,7 @@ renderCUDA(
 	float C[CHANNELS] = { 0 }, N[3] = {0}, D = 0, depth_first, CUT = 0;
 	float Conf = { 0.0001f };
 
-	bool surface = config[0] > 0, per_pixel_depth = config[2] > 0, normalize_depth = config[1] > 0;
+	bool surface = config[0] > 0, per_pixel_depth = config[2] > 0, normalize_depth = config[1] > 0, require_importance = config[3] > 0;
 	const int D_buffer_size = 128;
 	float D_buffer[D_buffer_size], W_buffer[D_buffer_size], depth_temp,
 	      axDif_buffer[D_buffer_size * 2], pid_buffer[D_buffer_size];
@@ -494,9 +498,12 @@ renderCUDA(
 			if (surface) for (int ch = 0; ch < 3; ch++) N[ch] += collected_normal[ch * BLOCK_SIZE + j] * w;
 
             // maximum weight over all rays as the importance score
-
-            // if (w > collected_importance[j])
-            //     collected_importance[j] = w;
+            if (require_importance)
+                // if (w > importance[collected_id[j]])
+                // atomicAdd(&(importance[collected_id[j]]), w);
+                if (test_T > 0.5f) {
+                    atomicAdd(&(importance[collected_id[j]]), 1.0);
+                }
 
 			T = test_T;
 
@@ -617,6 +624,7 @@ void FORWARD::render(
 	float* final_D,
 	uint32_t* n_contrib,
 	const float* bg_color,
+	const float* pixel_mask,
 	float* out_color,
 	float* out_normal,
 	float* out_depth,
@@ -643,6 +651,7 @@ void FORWARD::render(
 		final_D,
 		n_contrib,
 		bg_color,
+        pixel_mask,
 		out_color, out_normal, out_depth, out_opacity, out_confidence, out_importance,
 		config);
 }

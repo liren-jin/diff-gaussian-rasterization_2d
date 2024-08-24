@@ -33,6 +33,7 @@ def rasterize_gaussians(
     rotations,
     confidences,
     cov3Ds_precomp,
+    pixel_mask,
     raster_settings,
 ):
     return _RasterizeGaussians.apply(
@@ -45,6 +46,7 @@ def rasterize_gaussians(
         rotations,
         confidences,
         cov3Ds_precomp,
+        pixel_mask,
         raster_settings,
     )
 
@@ -62,6 +64,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         rotations,
         confidences,
         cov3Ds_precomp,
+        pixel_mask,
         raster_settings,
     ):
 
@@ -76,6 +79,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             confidences,
             raster_settings.scale_modifier,
             cov3Ds_precomp,
+            pixel_mask,
             raster_settings.viewmatrix,
             raster_settings.projmatrix,
             raster_settings.tanfovx,
@@ -255,6 +259,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_confidences,
             grad_cov3Ds_precomp,
             None,
+            None,
         )
 
         return grads
@@ -302,6 +307,7 @@ class GaussianRasterizer(nn.Module):
         rotations=None,
         confidences=None,
         cov3D_precomp=None,
+        pixel_mask=None,
     ):
 
         raster_settings = self.raster_settings
@@ -331,6 +337,8 @@ class GaussianRasterizer(nn.Module):
             rotations = torch.Tensor([])
         if cov3D_precomp is None:
             cov3D_precomp = torch.Tensor([])
+        if pixel_mask is None:
+            pixel_mask = torch.Tensor([])
 
         # Invoke C++/CUDA rasterization routine
         return rasterize_gaussians(
@@ -343,5 +351,6 @@ class GaussianRasterizer(nn.Module):
             rotations,
             confidences,
             cov3D_precomp,
+            pixel_mask,
             raster_settings,
         )
