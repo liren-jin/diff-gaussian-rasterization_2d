@@ -39,12 +39,13 @@ namespace CudaRasterizer
 			const float* shs,
 			const float* colors_precomp,
 			const float* opacities,
+			const float* confidences,
 			const float* scales,
 			const float scale_modifier,
 			const float* rotations,
-			const float* confidences,
 			const float* cov3D_precomp,
-			const float* pixel_mask,
+			const float* render_mask,
+			const float weight_thres,
 			const float* viewmatrix,
 			const float* projmatrix,
 			const float* cam_pos,
@@ -57,6 +58,7 @@ namespace CudaRasterizer
 			float* out_opacity,
 			float* out_confidence,
 			float* importance,
+            int* count,
 			int* radii = nullptr,
 			bool debug = false);
 
@@ -70,7 +72,6 @@ namespace CudaRasterizer
 			const float* scales,
 			const float scale_modifier,
 			const float* rotations,
-			const float* confidences,
 			const float* cov3D_precomp,
 			const float* viewmatrix,
 			const float* projmatrix,
@@ -84,7 +85,6 @@ namespace CudaRasterizer
 			const float* dL_dpixnormal,
 			const float* dL_dpixdepth,
 			const float* dL_dpixopacity,
-			const float* dL_dpixconfidence,
 			float* dL_dmean2D,
 			float* dL_dconic,
 			float* dL_dopacity,
@@ -96,7 +96,6 @@ namespace CudaRasterizer
 			float* dL_dsh,
 			float* dL_dscale,
 			float* dL_drot,
-			float* dL_dconfidence,
 			bool debug,
 			float* config);
 	};

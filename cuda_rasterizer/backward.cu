@@ -529,7 +529,6 @@ renderCUDA(
 	const float2* __restrict__ points_xy_image,
 	const float4* __restrict__ conic_opacity,
 	const float* __restrict__ colors,
-	const float* __restrict__ confidences,
 	const float* __restrict__ normal,
 	const float* __restrict__ depth,
 	const float* __restrict__ Jinv,
@@ -541,14 +540,12 @@ renderCUDA(
 	const float* __restrict__ dL_dpixnormal,
 	const float* __restrict__ dL_dpixdepth,
 	const float* __restrict__ dL_dpixopacity,
-	const float* __restrict__ dL_dpixconfidence,
 	float3* __restrict__ dL_dmean2D,
 	float4* __restrict__ dL_dconic2D,
 	float* __restrict__ dL_dopacity,
 	float* __restrict__ dL_dcolors,
 	float* __restrict__ dL_dnormal,
 	float* __restrict__ dL_ddepth,
-	float* __restrict__ dL_dconfidence,
 	float* config)
 {
 	// We rasterize again. Compute necessary block info.
@@ -594,13 +591,13 @@ renderCUDA(
 	// const int last_contributor_cut = inside ? n_contrib_cut[pix_id] : 0;
 
 	float accum_rec[C] = { 0 }, accum_rec_n[3] = {0}, accum_rec_d = 0, accum_rec_v = 0;
-	float dL_dpixC[C], dL_dpixN[3], dL_dpixD, dL_dpixO, dL_dpixConf;
+	float dL_dpixC[C], dL_dpixN[3], dL_dpixD, dL_dpixO, dL_dpixUn;
 	if (inside) {
 		for (int i = 0; i < C; i++) dL_dpixC[i] = dL_dpixcolor[i * H * W + pix_id];
 		for (int i = 0; i < 3; i++) dL_dpixN[i] = dL_dpixnormal[i * H * W + pix_id];
 		dL_dpixD = dL_dpixdepth[pix_id] * 1;
 		dL_dpixO = dL_dpixopacity[pix_id];
-        dL_dpixConf = dL_dpixconfidence[pix_id];
+        // dL_dpixUn = dL_dpixuncertainty[pix_id];
 		// dL_dpixV = dL_dpixrayVar[pix_id];
 	}
 
@@ -741,7 +738,7 @@ renderCUDA(
 			
 			// Update last alpha (to be used in the next iteration)
 			last_alpha = alpha;
-			atomicAdd(&dL_dconfidence[global_id], dL_dpixConf * (alpha * T));
+			// atomicAdd(&dL_dconfidence[global_id], dL_dpixConf * (alpha * T));
 			// Account for fact that alpha also influences how much of
 			// the background color is added if nothing left to blend
 			float bg_dot_dpixel = 0;
@@ -872,7 +869,6 @@ void BACKWARD::render(
 	const float2* means2D,
 	const float4* conic_opacity,
 	const float* colors,
-	const float* confidences,
 	const float* normal,
 	const float* depth,
 	const float* Jinv,
@@ -884,14 +880,12 @@ void BACKWARD::render(
 	const float* dL_dpixnormal,
 	const float* dL_dpixdepth,
 	const float* dL_dpixopacity,
-	const float* dL_dpixconfidence,
 	float3* dL_dmean2D,
 	float4* dL_dconic2D,
 	float* dL_dopacity,
 	float* dL_dcolors,
 	float* dL_dnormal,
 	float* dL_ddepth,
-	float* dL_dconfidence,
 	float* config)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> >(
@@ -902,7 +896,6 @@ void BACKWARD::render(
 		means2D,
 		conic_opacity,
 		colors,
-        confidences,
 		normal,
 		depth,
 		Jinv,
@@ -914,14 +907,12 @@ void BACKWARD::render(
 		dL_dpixnormal,
 		dL_dpixdepth,
 		dL_dpixopacity,
-		dL_dpixconfidence,
 		dL_dmean2D,
 		dL_dconic2D,
 		dL_dopacity,
 		dL_dcolors,
 		dL_dnormal,
 		dL_ddepth,
-		dL_dconfidence,
 		config
 		);
 }

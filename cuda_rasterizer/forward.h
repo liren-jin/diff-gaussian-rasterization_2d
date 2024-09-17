@@ -73,13 +73,15 @@ namespace FORWARD
 		float* final_D,
 		uint32_t* n_contrib,
 		const float* bg_color,
-		const float* pixel_mask,
+		const float* render_mask,
+        const float weight_thres,
 		float* out_color,
 		float* out_normal,
 		float* out_depth,
 		float* out_opacity,
 		float* out_confidence,
 		float* importance,
+        int* count,
 		float* config);
 }
 

@@ -212,12 +212,13 @@ int CudaRasterizer::Rasterizer::forward(
 	const float* shs,
 	const float* colors_precomp,
 	const float* opacities,
+	const float* confidences,
 	const float* scales,
 	const float scale_modifier,
 	const float* rotations,
-	const float* confidences,
 	const float* cov3D_precomp,
-	const float* pixel_mask,
+	const float* render_mask,
+    const float weight_thres,
 	const float* viewmatrix,
 	const float* projmatrix,
 	const float* cam_pos,
@@ -230,6 +231,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float* out_opacity,
 	float* out_confidence,
 	float* importance,
+	int* count,
 	int* radii,
 	bool debug)
 {
@@ -358,8 +360,9 @@ int CudaRasterizer::Rasterizer::forward(
 		imgState.accum_depth,
 		imgState.n_contrib,
 		background,
-        pixel_mask,
-		out_color, out_normal, out_depth, out_opacity, out_confidence, importance, 
+        render_mask,
+        weight_thres,
+		out_color, out_normal, out_depth, out_opacity, out_confidence, importance, count, 
 		config), debug)
 	return num_rendered;
 }
@@ -376,7 +379,6 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* scales,
 	const float scale_modifier,
 	const float* rotations,
-	const float* confidences,
 	const float* cov3D_precomp,
 	const float* viewmatrix,
 	const float* projmatrix,
@@ -390,7 +392,6 @@ void CudaRasterizer::Rasterizer::backward(
 	const float* dL_dpixnormal,
 	const float* dL_dpixdepth,
 	const float* dL_dpixopacity,
-	const float* dL_dpixconfidence,
 	float* dL_dmean2D,
 	float* dL_dconic,
 	float* dL_dopacity,
@@ -402,7 +403,6 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_dsh,
 	float* dL_dscale,
 	float* dL_drot,
-	float* dL_dconfidence,
 	bool debug, 
 	float* config)
 {
@@ -435,7 +435,6 @@ void CudaRasterizer::Rasterizer::backward(
 		geomState.means2D,
 		geomState.conic_opacity,
 		color_ptr,
-        confidences,
 		geomState.normal,
 		geomState.depths,
 		geomState.Jinv,
@@ -447,14 +446,12 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dpixnormal,
 		dL_dpixdepth,
 		dL_dpixopacity,
-		dL_dpixconfidence,
 		(float3*)dL_dmean2D,
 		(float4*)dL_dconic,
 		dL_dopacity,
 		dL_dcolor,
 		dL_dnormal,
 		dL_ddepth, 
-        dL_dconfidence,
         config), debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance

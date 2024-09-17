@@ -29,7 +29,6 @@ namespace BACKWARD
 		const float2* means2D,
 		const float4* conic_opacity,
 		const float* colors,
-		const float* confidences,
 		const float* normal,
 		const float* depth,
 		const float* Jinv,
@@ -41,14 +40,12 @@ namespace BACKWARD
 		const float* dL_dpixnormal,
 		const float* dL_dpixdepth,
 		const float* dL_dpixopacity,
-		const float* dL_dpixconfidence,
 		float3* dL_dmean2D,
 		float4* dL_dconic2D,
 		float* dL_dopacity,
 		float* dL_dcolors,
 		float* dL_dnormal,
 		float* dL_ddepth,
-		float* dL_dconfidence,
 		float* config);
 
 	void preprocess(

@@ -357,13 +357,15 @@ renderCUDA(
 	float* __restrict__ final_D,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
-	const float* __restrict__ pixel_mask,
+	const float* __restrict__ render_mask,
+    const float weight_thres,
 	float* __restrict__ out_color,
 	float* __restrict__ out_normal,
 	float* __restrict__ out_depth,
 	float* __restrict__ out_opacity,
 	float* __restrict__ out_confidence,
 	float* __restrict__ importance,
+	int* __restrict__ count,
 	float* config)
 {
 	// Identify current tile and associated min/max pixel range.
@@ -376,43 +378,44 @@ renderCUDA(
 	float2 pixf = { (float)pix.x, (float)pix.y };
 
 
-	// Check if this thread is associated with a valid pixel or outside.
+	// Check if this thread is associated with a valid pixel and require rendering.
 	bool inside = pix.x < W && pix.y < H;
     bool require_render = true;
-    if (pixel_mask != nullptr)
-        require_render = pixel_mask[pix_id] > 0.0;
+    if (inside && render_mask != nullptr)
+        require_render = render_mask[pix_id] > 0.0;
 	// Done threads can help with fetching, but don't rasterize
 	bool done = (!inside) || (!require_render);
+
 
 	// Load start/end range of IDs to process in bit sorted list.
 	uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
 	const int rounds = ((range.y - range.x + BLOCK_SIZE - 1) / BLOCK_SIZE);
-	int toDo = range.y - range.x;
+	int toDo = range.y - range.x; // how many gaussians are within each block
 
 	// Allocate storage for batches of collectively fetched data.
 	__shared__ int collected_id[BLOCK_SIZE];
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
-	__shared__ float collected_importance[BLOCK_SIZE];
 	__shared__ float collected_feature[CHANNELS * BLOCK_SIZE];
 	__shared__ float collected_depth[BLOCK_SIZE];
-	__shared__ float collected_normal[3 * BLOCK_SIZE];
 	__shared__ float collected_confidence[BLOCK_SIZE];
+	__shared__ float collected_normal[3 * BLOCK_SIZE];
 	__shared__ float collected_Jinv[10 * BLOCK_SIZE];
 	__shared__ int collected_pid[BLOCK_SIZE];
-	// __shared__ float4 collected_cutOff[BLOCK_SIZE];
 
 	// Initialize helper variables
 	float T = 1.0f, test_T;
 	uint32_t contributor = 0, blend_count = 0;
 	uint32_t last_contributor = 0, cut_contributor = 0;
-	float C[CHANNELS] = { 0 }, N[3] = {0}, D = 0, depth_first, CUT = 0;
-	float Conf = { 0.0001f };
+	float C[CHANNELS] = { 0 }, N[3] = {0}, D = 0, Conf = 0, depth_first, CUT = 0;
 
-	bool surface = config[0] > 0, per_pixel_depth = config[2] > 0, normalize_depth = config[1] > 0, require_importance = config[3] > 0;
+    // rendering setup
+	bool surface = config[0] > 0, normalize_depth = config[1] > 0, per_pixel_depth = config[2] > 0, require_importance = config[3] > 0;
+
 	const int D_buffer_size = 128;
 	float D_buffer[D_buffer_size], W_buffer[D_buffer_size], depth_temp,
 	      axDif_buffer[D_buffer_size * 2], pid_buffer[D_buffer_size];
+
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -434,7 +437,6 @@ renderCUDA(
 			for (int i = 0; i < CHANNELS; i++) collected_feature[i * BLOCK_SIZE + block.thread_rank()] = features[coll_id * CHANNELS + i];
 			collected_depth[block.thread_rank()] = depth[coll_id];
 			collected_pid[block.thread_rank()] = pid[coll_id];
-			// collected_importance[block.thread_rank()] = importance[coll_id];
 			for (int i = 0; i < 3; i++) collected_normal[i * BLOCK_SIZE + block.thread_rank()] = normal[coll_id * 3 + i];
 			for (int i = 0; i < 10; i++) collected_Jinv[i * BLOCK_SIZE + block.thread_rank()] = Jinv[coll_id * 10 + i];
 		}
@@ -469,8 +471,10 @@ renderCUDA(
 				done = true;
 				continue;
 			}
-			float w = alpha * T;			
-			
+			float w = alpha * T;	
+
+
+            // alpha blending
 			depth_temp = collected_depth[j];
             float Jinv_temp[10];
             for (int ch = 0; ch < 10; ch++) Jinv_temp[ch] = collected_Jinv[ch * BLOCK_SIZE + j];
@@ -492,18 +496,18 @@ renderCUDA(
 			}
 
             Conf += collected_confidence[j] * w;
-			// Eq. (3) from 3D Gaussian splatting paper.
-			for (int ch = 0; ch < CHANNELS; ch++) C[ch] += collected_feature[ch * BLOCK_SIZE + j] * w;
-			
-			if (surface) for (int ch = 0; ch < 3; ch++) N[ch] += collected_normal[ch * BLOCK_SIZE + j] * w;
 
-            // maximum weight over all rays as the importance score
-            if (require_importance)
-                // if (w > importance[collected_id[j]])
-                // atomicAdd(&(importance[collected_id[j]]), w);
-                if (test_T > 0.5f) {
-                    atomicAdd(&(importance[collected_id[j]]), 1.0);
+			// Eq. (3) from 3D Gaussian splatting paper.
+			for (int ch = 0; ch < CHANNELS; ch++) C[ch] += collected_feature[ch * BLOCK_SIZE +j] * w;
+            if (surface) for (int ch=0; ch<3; ch++) N[ch] += collected_normal[ch * BLOCK_SIZE +j] * w;
+
+            // Calculate each gaussian's contribution to rendering
+            if (require_importance){
+                if (w > weight_thres){               
+                    atomicAdd(&(importance[collected_id[j]]), w);
+                    atomicAdd(&(count[collected_id[j]]), 1);
                 }
+            }
 
 			T = test_T;
 
@@ -531,20 +535,27 @@ renderCUDA(
 	if (inside)
 	{
 		T = fminf(1 - 0.000001, T);
-
-
 		final_T[pix_id] = T;
 		n_contrib[pix_id] = last_contributor;
+
 		for (int ch = 0; ch < CHANNELS; ch++) {
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		}
-		out_normal[0 * H * W + pix_id] = surface ? N[0] : 0;
-		out_normal[1 * H * W + pix_id] = surface ? N[1] : 0;
-		out_normal[2 * H * W + pix_id] = surface ? N[2] : 0;
+
+        for (int ch=0; ch<3; ch++){
+            out_normal[ch * H * W + pix_id] = surface ? N[ch] : 0;
+        }
 		out_depth[pix_id] = normalize_depth ? D / (1 - T) : D + T * 10;
 		out_opacity[pix_id] = 1 - T;
         out_confidence[pix_id] = Conf;
 		if (normalize_depth) final_D[pix_id] = D;
+
+
+        
+
+        // assgin per-pixel depth and rgb variance as uncertainty
+
+        
 
 		// // Calculate depth variance along a ray
 		// float D_var = 0, D_mean = D / (1 - T), D_dif_mean, D_dif_mid, D_max = 5;
@@ -624,13 +635,15 @@ void FORWARD::render(
 	float* final_D,
 	uint32_t* n_contrib,
 	const float* bg_color,
-	const float* pixel_mask,
+	const float* render_mask,
+    const float weight_thres,
 	float* out_color,
 	float* out_normal,
 	float* out_depth,
 	float* out_opacity,
 	float* out_confidence,
-	float* out_importance,
+	float* importance,
+    int* count,
 	float* config)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
@@ -651,8 +664,9 @@ void FORWARD::render(
 		final_D,
 		n_contrib,
 		bg_color,
-        pixel_mask,
-		out_color, out_normal, out_depth, out_opacity, out_confidence, out_importance,
+        render_mask,
+        weight_thres,
+		out_color, out_normal, out_depth, out_opacity, out_confidence, importance, count,
 		config);
 }
 

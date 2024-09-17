@@ -29,11 +29,10 @@ def rasterize_gaussians(
     sh,
     colors_precomp,
     opacities,
+    confidences,
     scales,
     rotations,
-    confidences,
     cov3Ds_precomp,
-    pixel_mask,
     raster_settings,
 ):
     return _RasterizeGaussians.apply(
@@ -42,11 +41,10 @@ def rasterize_gaussians(
         sh,
         colors_precomp,
         opacities,
+        confidences,
         scales,
         rotations,
-        confidences,
         cov3Ds_precomp,
-        pixel_mask,
         raster_settings,
     )
 
@@ -60,11 +58,10 @@ class _RasterizeGaussians(torch.autograd.Function):
         sh,
         colors_precomp,
         opacities,
+        confidences,
         scales,
         rotations,
-        confidences,
         cov3Ds_precomp,
-        pixel_mask,
         raster_settings,
     ):
 
@@ -74,12 +71,11 @@ class _RasterizeGaussians(torch.autograd.Function):
             means3D,
             colors_precomp,
             opacities,
+            confidences,
             scales,
             rotations,
-            confidences,
             raster_settings.scale_modifier,
             cov3Ds_precomp,
-            pixel_mask,
             raster_settings.viewmatrix,
             raster_settings.projmatrix,
             raster_settings.tanfovx,
@@ -90,6 +86,8 @@ class _RasterizeGaussians(torch.autograd.Function):
             raster_settings.sh_degree,
             raster_settings.campos,
             raster_settings.prefiltered,
+            raster_settings.render_mask,
+            raster_settings.weight_thres,
             raster_settings.debug,
             raster_settings.config,
         )
@@ -108,6 +106,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                     opacity,
                     confidence,
                     importance,
+                    count,
                     radii,
                     geomBuffer,
                     binningBuffer,
@@ -128,6 +127,7 @@ class _RasterizeGaussians(torch.autograd.Function):
                 opacity,
                 confidence,
                 importance,
+                count,
                 radii,
                 geomBuffer,
                 binningBuffer,
@@ -141,8 +141,8 @@ class _RasterizeGaussians(torch.autograd.Function):
             colors_precomp,
             means3D,
             scales,
-            rotations,
             confidences,
+            rotations,
             cov3Ds_precomp,
             radii,
             sh,
@@ -150,7 +150,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             binningBuffer,
             imgBuffer,
         )
-        return color, normal, depth, opacity, confidence, importance, radii
+        return color, normal, depth, opacity, confidence, importance, count
 
     @staticmethod
     def backward(
@@ -172,7 +172,6 @@ class _RasterizeGaussians(torch.autograd.Function):
             means3D,
             scales,
             rotations,
-            confidences,
             cov3Ds_precomp,
             radii,
             sh,
@@ -189,7 +188,6 @@ class _RasterizeGaussians(torch.autograd.Function):
             colors_precomp,
             scales,
             rotations,
-            confidences,
             raster_settings.scale_modifier,
             cov3Ds_precomp,
             raster_settings.viewmatrix,
@@ -200,7 +198,6 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_out_normal,
             grad_out_depth,
             grad_out_opacity,
-            grad_out_confidence,
             sh,
             raster_settings.sh_degree,
             raster_settings.campos,
@@ -227,7 +224,6 @@ class _RasterizeGaussians(torch.autograd.Function):
                     grad_sh,
                     grad_scales,
                     grad_rotations,
-                    grad_confidences,
                 ) = _C.rasterize_gaussians_backward(*args)
             except Exception as ex:
                 torch.save(cpu_args, "snapshot_bw.dump")
@@ -245,7 +241,6 @@ class _RasterizeGaussians(torch.autograd.Function):
                 grad_sh,
                 grad_scales,
                 grad_rotations,
-                grad_confidences,
             ) = _C.rasterize_gaussians_backward(*args)
 
         grads = (
@@ -254,11 +249,10 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_sh,
             grad_colors_precomp,
             grad_opacities,
+            None,
             grad_scales,
             grad_rotations,
-            grad_confidences,
             grad_cov3Ds_precomp,
-            None,
             None,
         )
 
@@ -277,6 +271,8 @@ class GaussianRasterizationSettings(NamedTuple):
     sh_degree: int
     campos: torch.Tensor
     prefiltered: bool
+    render_mask: torch.Tensor
+    weight_thres: float
     debug: bool
     config: torch.Tensor
 
@@ -301,13 +297,12 @@ class GaussianRasterizer(nn.Module):
         means3D,
         means2D,
         opacities,
+        confidences,
         shs=None,
         colors_precomp=None,
         scales=None,
         rotations=None,
-        confidences=None,
         cov3D_precomp=None,
-        pixel_mask=None,
     ):
 
         raster_settings = self.raster_settings
@@ -330,15 +325,12 @@ class GaussianRasterizer(nn.Module):
             shs = torch.Tensor([])
         if colors_precomp is None:
             colors_precomp = torch.Tensor([])
-
         if scales is None:
             scales = torch.Tensor([])
         if rotations is None:
             rotations = torch.Tensor([])
         if cov3D_precomp is None:
             cov3D_precomp = torch.Tensor([])
-        if pixel_mask is None:
-            pixel_mask = torch.Tensor([])
 
         # Invoke C++/CUDA rasterization routine
         return rasterize_gaussians(
@@ -347,10 +339,9 @@ class GaussianRasterizer(nn.Module):
             shs,
             colors_precomp,
             opacities,
+            confidences,
             scales,
             rotations,
-            confidences,
             cov3D_precomp,
-            pixel_mask,
             raster_settings,
         )
