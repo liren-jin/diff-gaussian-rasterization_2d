@@ -141,8 +141,8 @@ class _RasterizeGaussians(torch.autograd.Function):
             colors_precomp,
             means3D,
             scales,
-            confidences,
             rotations,
+            confidences,
             cov3Ds_precomp,
             radii,
             sh,
@@ -150,7 +150,16 @@ class _RasterizeGaussians(torch.autograd.Function):
             binningBuffer,
             imgBuffer,
         )
-        return color, normal, depth, opacity, confidence, importance, count
+        return (
+            color,
+            normal,
+            depth,
+            opacity,
+            confidence,
+            importance,
+            count,
+            radii,
+        )
 
     @staticmethod
     def backward(
@@ -161,6 +170,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         grad_out_opacity,
         grad_out_confidence,
         grad_out_importance,
+        grad_out_count,
         grad_out_radii,
     ):
 
@@ -172,6 +182,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             means3D,
             scales,
             rotations,
+            confidences,
             cov3Ds_precomp,
             radii,
             sh,
@@ -179,6 +190,8 @@ class _RasterizeGaussians(torch.autograd.Function):
             binningBuffer,
             imgBuffer,
         ) = ctx.saved_tensors
+
+        confidence_factor = (1 - confidences).unsqueeze(-1)
 
         # Restructure args as C++ method expects them
         args = (
@@ -243,6 +256,18 @@ class _RasterizeGaussians(torch.autograd.Function):
                 grad_rotations,
             ) = _C.rasterize_gaussians_backward(*args)
 
+        # grads = (
+        #     grad_means3D * confidence_factor,
+        #     grad_means2D * confidence_factor,
+        #     grad_sh * confidence_factor.unsqueeze(-1),
+        #     grad_colors_precomp * confidence_factor,
+        #     grad_opacities * confidence_factor,
+        #     None,
+        #     grad_scales * confidence_factor,
+        #     grad_rotations * confidence_factor,
+        #     grad_cov3Ds_precomp * confidence_factor,
+        #     None,
+        # )
         grads = (
             grad_means3D,
             grad_means2D,
