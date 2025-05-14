@@ -370,3 +370,10 @@ class GaussianRasterizer(nn.Module):
             cov3D_precomp,
             raster_settings,
         )
+
+def check_visible(points, view_matrix, projection_matrix):
+    visible = _C.mark_visible(
+        points, view_matrix, projection_matrix
+    )
+
+    return visible

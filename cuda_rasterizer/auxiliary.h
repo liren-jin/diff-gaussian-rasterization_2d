@@ -159,6 +159,40 @@ __forceinline__ __device__ bool in_frustum(
 	return true;
 }
 
+__forceinline__ __device__ bool in_frustum_points(int idx,
+	const float* orig_points,
+	const float* viewmatrix,
+	const float* projmatrix,
+	bool prefiltered,
+	float3& p_view)
+{
+	// this is for visibility check
+	float3 p_orig = { orig_points[3 * idx], orig_points[3 * idx + 1], orig_points[3 * idx + 2] };
+
+	// Bring points to screen space
+	float4 p_hom = transformPoint4x4(p_orig, projmatrix);
+	float p_w = 1.0f / (p_hom.w + 0.0000001f);
+	float3 p_proj = { p_hom.x * p_w, p_hom.y * p_w, p_hom.z * p_w };
+	p_view = transformPoint4x3(p_orig, viewmatrix);
+
+	// TODO: p_proj part are off for original 3D GS
+	float wider_range = 1.05f;
+	// wider_range = 1.3f;
+
+	if ((p_view.z <= 0.1f) || (p_proj.x < -wider_range) || (p_proj.x > wider_range) || (p_proj.y < -wider_range) || (p_proj.y > wider_range)
+	)
+	{
+		if (prefiltered)
+		{
+			printf("Point is filtered although prefiltered is set. This shouldn't happen!");
+			__trap();
+		}
+		return false;
+	}
+	return true;
+}
+
+
 __forceinline__ __device__ bool front_facing(
 	float3& n_view,
 	float3& p_view,
